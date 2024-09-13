@@ -60,7 +60,7 @@ accelerate launch train_flux_lora_deepspeed.py --config "train_configs/test_lora
 ### ControlNet
 
 ```bash
-accelerate launch train_flux_deepspeed_controlnet.py --config "train_configs/test_canny_controlnet.yaml"
+accelerate launch --config_file "accelerate_config.yaml" train_flux_deepspeed_controlnet.py --config "train_configs/test_canny_controlnet.yaml"
 ```
 
 ## Training Dataset

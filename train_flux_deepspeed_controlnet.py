@@ -38,6 +38,8 @@ from src.flux.sampling import denoise, get_noise, get_schedule, prepare, unpack
 from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_controlnet, load_t5)
 from image_datasets.canny_dataset import loader
+from image_datasets.cp_dataset import VitonHDTestDataset
+
 if is_wandb_available():
     import wandb
 logger = get_logger(__name__, log_level="INFO")
@@ -121,8 +123,50 @@ def main():
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
+    
+    train_dataset = VitonHDTestDataset(
+        dataroot_path=args.dataroot,
+        phase="train",
+        order="paired",
+        size=(args.height, args.width),
+        data_list=args.train_data_list,
+    )
+    
+    train_verification_dataset = VitonHDTestDataset(
+        dataroot_path=args.dataroot,
+        phase="train",
+        order="paired",
+        size=(args.height, args.width),
+        data_list=args.train_verification_list,
+    )
+    
+    validation_dataset = VitonHDTestDataset(
+        dataroot_path=args.dataroot,
+        phase="test",
+        order="paired",
+        size=(args.height, args.width),
+        data_list=args.validation_data_list,
+    )
 
-    train_dataloader = loader(**args.data_config)
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        shuffle=False,
+        batch_size=args.train_batch_size,
+    )
+    
+    train_verification_dataloader = torch.utils.data.DataLoader(
+        train_verification_dataset,
+        shuffle=False,
+        batch_size=args.train_batch_size,
+    )
+    
+    validation_dataloader = torch.utils.data.DataLoader(
+        validation_dataset,
+        shuffle=False,
+        batch_size=args.train_batch_size,
+    )
+
+    # train_dataloader = loader(**args.data_config)
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -207,7 +251,11 @@ def main():
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(controlnet):
-                img, control_image, prompts = batch
+                img = batch["image"]  # The batch image is from [-1, 1], convert it to [0, 1]
+                control_image = batch["im_mask"] 
+                prompts = batch["caption"]
+                
+                
                 control_image = control_image.to(accelerator.device)
                 with torch.no_grad():
                     x_1 = vae.encode(img.to(accelerator.device).to(torch.float32))
